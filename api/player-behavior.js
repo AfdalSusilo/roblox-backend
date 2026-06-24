@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { playerId, playerName, playerNickname, mouseEvents, positionHistory, behaviorSequence, sessionTime } =
+    const { id, playerId, playerName, playerNickname, mouseEvents, positionHistory, behaviorSequence, sessionTime } =
       req.body ?? {};
 
     // ----- validate required fields -----
@@ -22,20 +22,35 @@ export default async function handler(req, res) {
       });
     }
 
-    await sql`
-      INSERT INTO behavior_logs
-        (player_id, player_name, player_nickname, mouse_events, position_history, behavior_sequence, session_time, created_at)
-      VALUES (
-        ${playerId},
-        ${playerName || null},
-        ${playerNickname || null},
-        ${JSON.stringify(mouseEvents ?? [])},
-        ${JSON.stringify(positionHistory ?? [])},
-        ${JSON.stringify(behaviorSequence ?? [])},
-        ${sessionTime ?? 0},
-        NOW()
-      )
-    `;
+    if (id) {
+      // Real-time update of existing session
+      await sql`
+        UPDATE behavior_logs
+        SET behavior_sequence = ${JSON.stringify(behaviorSequence ?? [])},
+            session_time = ${sessionTime ?? 0},
+            created_at = NOW()
+        WHERE id = ${id}
+      `;
+      return res.status(200).json({ success: true, id });
+    } else {
+      // Insert new session and return its id
+      const result = await sql`
+        INSERT INTO behavior_logs
+          (player_id, player_name, player_nickname, mouse_events, position_history, behavior_sequence, session_time, created_at)
+        VALUES (
+          ${playerId},
+          ${playerName || null},
+          ${playerNickname || null},
+          ${JSON.stringify(mouseEvents ?? [])},
+          ${JSON.stringify(positionHistory ?? [])},
+          ${JSON.stringify(behaviorSequence ?? [])},
+          ${sessionTime ?? 0},
+          NOW()
+        )
+        RETURNING id
+      `;
+      return res.status(201).json({ success: true, id: result[0].id });
+    }
 
     return res.status(201).json({ success: true });
   } catch (err) {
