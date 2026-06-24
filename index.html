@@ -316,18 +316,10 @@ async function clearAllSessions() {
 
 function renderGuiTable() {
   const q = document.getElementById('guiSearch').value.toLowerCase();
-  const dateStr = document.getElementById('guiDateFilter').value;
   const filtered = guiLogs.filter(r => {
-    const matchesQuery = r.player_id.toLowerCase().includes(q) || 
-                         (r.player_name && r.player_name.toLowerCase().includes(q)) ||
-                         (r.player_nickname && r.player_nickname.toLowerCase().includes(q));
-    if (!matchesQuery) return false;
-    
-    if (dateStr) {
-      const recordDate = new Date(r.created_at).toISOString().split('T')[0];
-      return recordDate === dateStr;
-    }
-    return true;
+    return r.player_id.toLowerCase().includes(q) || 
+           (r.player_name && r.player_name.toLowerCase().includes(q)) ||
+           (r.player_nickname && r.player_nickname.toLowerCase().includes(q));
   });
 
   if (filtered.length === 0) {
@@ -355,18 +347,10 @@ function renderGuiTable() {
 
 function renderBehTable() {
   const q = document.getElementById('behSearch').value.toLowerCase();
-  const dateStr = document.getElementById('behDateFilter').value;
   const filtered = behLogs.filter(r => {
-    const matchesQuery = r.player_id.toLowerCase().includes(q) || 
-                         (r.player_name && r.player_name.toLowerCase().includes(q)) ||
-                         (r.player_nickname && r.player_nickname.toLowerCase().includes(q));
-    if (!matchesQuery) return false;
-    
-    if (dateStr) {
-      const recordDate = new Date(r.created_at).toISOString().split('T')[0];
-      return recordDate === dateStr;
-    }
-    return true;
+    return r.player_id.toLowerCase().includes(q) || 
+           (r.player_name && r.player_name.toLowerCase().includes(q)) ||
+           (r.player_nickname && r.player_nickname.toLowerCase().includes(q));
   });
 
   if (filtered.length === 0) {
@@ -407,18 +391,27 @@ function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt
 function escAttr(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
 function exportData(type) {
-  const data = type === 'gui' ? guiLogs : behLogs;
-  if (data.length === 0) { showToast('No data to export'); return; }
+  const dateStr = document.getElementById(type === 'gui' ? 'guiDateFilter' : 'behDateFilter').value;
+  let data = type === 'gui' ? guiLogs : behLogs;
+
+  if (dateStr) {
+    data = data.filter(r => {
+      const recordDate = new Date(r.created_at).toISOString().split('T')[0];
+      return recordDate === dateStr;
+    });
+  }
+
+  if (data.length === 0) { showToast('No data found for the selected export date'); return; }
 
   let csv, filename;
   if (type === 'gui') {
-    csv = 'player_id,ui_element,input_data,timestamp\n' +
-      data.map(r => `"${r.player_id}","${r.ui_element}","${r.input_data}","${r.created_at}"`).join('\n');
-    filename = 'gui_logs.csv';
+    csv = 'player_id,player_name,player_nickname,ui_element,input_data,timestamp\n' +
+      data.map(r => `"${r.player_id}","${r.player_name || ''}","${r.player_nickname || ''}","${r.ui_element}","${r.input_data.replace(/"/g, '""')}","${r.created_at}"`).join('\n');
+    filename = `gui_logs_${dateStr || 'all'}.csv`;
   } else {
-    csv = 'player_id,mouse_events,position_history,behavior_sequence,session_time,timestamp\n' +
-      data.map(r => `"${r.player_id}","${JSON.stringify(r.mouse_events)}","${JSON.stringify(r.position_history)}","${JSON.stringify(r.behavior_sequence)}",${r.session_time},"${r.created_at}"`).join('\n');
-    filename = 'behavior_logs.csv';
+    csv = 'player_id,player_name,player_nickname,mouse_events,position_history,behavior_sequence,session_time,timestamp\n' +
+      data.map(r => `"${r.player_id}","${r.player_name || ''}","${r.player_nickname || ''}","${JSON.stringify(r.mouse_events).replace(/"/g, '""')}","${JSON.stringify(r.position_history).replace(/"/g, '""')}","${JSON.stringify(r.behavior_sequence).replace(/"/g, '""')}",${r.session_time},"${r.created_at}"`).join('\n');
+    filename = `behavior_logs_${dateStr || 'all'}.csv`;
   }
 
   const blob = new Blob([csv], {type:'text/csv'});
@@ -428,6 +421,11 @@ function exportData(type) {
   URL.revokeObjectURL(url);
   showToast(`Exported ${filename}`);
 }
+
+// Set default date input values to today's date in local time zone
+const today = new Date().toLocaleDateString('sv').split(' ')[0]; // sv format is YYYY-MM-DD
+document.getElementById('guiDateFilter').value = today;
+document.getElementById('behDateFilter').value = today;
 
 refreshAll();
 setInterval(refreshAll, 30000);
