@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roblox Monitoring Dashboard</title>
+<style>
+  :root {
+    --bg: #0f0f14;
+    --card: #1a1a24;
+    --border: #2a2a38;
+    --text: #e0e0f0;
+    --dim: #6a6a8a;
+    --accent: #6c5ce7;
+    --green: #00cec9;
+    --red: #e74c3c;
+    --orange: #f39c12;
+    --row: #14141e;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    backdrop-filter: blur(12px);
+  }
+  header h1 { font-size: 1.25rem; color: var(--accent); letter-spacing: -0.5px; }
+  header small { color: var(--dim); font-size: 0.75rem; }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    padding: 24px;
+  }
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .stat-card .label { color: var(--dim); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-card .value { font-size: 2rem; font-weight: 700; }
+  .stat-card .value.green { color: var(--green); }
+  .stat-card .value.accent { color: var(--accent); }
+  .section {
+    padding: 0 24px 24px;
+  }
+  .section h2 {
+    font-size: 1rem;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+  }
+  .filters {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .filters input, .filters select {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    outline: none;
+  }
+  .filters input:focus, .filters select:focus { border-color: var(--accent); }
+  .filters input { flex:1; min-width: 200px; }
+  .filters button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 8px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .filters button:hover { opacity: 0.85; }
+  .filters button.export {
+    background: var(--green);
+    color: #000;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+  th {
+    text-align: left;
+    padding: 10px 12px;
+    color: var(--dim);
+    border-bottom: 2px solid var(--border);
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.5px;
+  }
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    word-break: break-word;
+  }
+  tr:nth-child(even) { background: var(--row); }
+  tr:hover { background: rgba(108,92,231,0.08); }
+  .code {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.75rem;
+    background: rgba(0,0,0,0.3);
+    padding: 2px 6px;
+    border-radius: 3px;
+    max-height: 40px;
+    overflow: hidden;
+    display: inline-block;
+    max-width: 200px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .loading {
+    text-align: center;
+    padding: 40px;
+    color: var(--dim);
+  }
+  .empty {
+    text-align: center;
+    padding: 40px;
+    color: var(--dim);
+    font-style: italic;
+  }
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--accent);
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 8px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+  .player-id {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  @media (max-width: 600px) {
+    .stats-grid { grid-template-columns: 1fr 1fr; padding: 12px; gap: 10px; }
+    .section { padding: 0 12px 12px; }
+    table { font-size: 0.7rem; }
+    th, td { padding: 6px 8px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🎮 Roblox Monitor</h1>
+    <small>Real-time player monitoring dashboard</small>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button onclick="refreshAll()" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.82rem">🔄 Refresh</button>
+  </div>
+</header>
+
+<!-- Stats -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <span class="label">Total GUI Inputs</span>
+    <span class="value accent" id="stat-gui">—</span>
+  </div>
+  <div class="stat-card">
+    <span class="label">Behavior Sessions</span>
+    <span class="value accent" id="stat-beh">—</span>
+  </div>
+  <div class="stat-card">
+    <span class="label">Unique Players</span>
+    <span class="value green" id="stat-players">—</span>
+  </div>
+  <div class="stat-card">
+    <span class="label">Latest Activity</span>
+    <span class="value" style="font-size:0.9rem" id="stat-latest">—</span>
+  </div>
+</div>
+
+<!-- GUI Logs -->
+<div class="section">
+  <h2>🖱️ GUI Input Logs</h2>
+  <div class="filters">
+    <input type="text" id="guiSearch" placeholder="Search by Player ID..." oninput="renderGuiTable()">
+    <button onclick="exportData('gui')" class="export">⬇ Export CSV</button>
+  </div>
+  <div id="guiTableContainer">
+    <div class="loading">Loading...</div>
+  </div>
+</div>
+
+<!-- Behavior Logs -->
+<div class="section">
+  <h2>🎯 Behavior Logs</h2>
+  <div class="filters">
+    <input type="text" id="behSearch" placeholder="Search by Player ID..." oninput="renderBehTable()">
+    <button onclick="exportData('beh')" class="export">⬇ Export CSV</button>
+  </div>
+  <div id="behTableContainer">
+    <div class="loading">Loading...</div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+let guiLogs = [];
+let behLogs = [];
+const API = window.location.origin;
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+async function fetchJSON(path) {
+  const res = await fetch(`${API}${path}`);
+  if (!res.ok) throw new Error(`${res.status}`);
+  return res.json();
+}
+
+async function refreshAll() {
+  document.getElementById('stat-gui').textContent = '...';
+  document.getElementById('stat-beh').textContent = '...';
+  document.getElementById('stat-players').textContent = '...';
+  document.getElementById('guiTableContainer').innerHTML = '<div class="loading">Loading...</div>';
+  document.getElementById('behTableContainer').innerHTML = '<div class="loading">Loading...</div>';
+
+  try {
+    const stats = await fetchJSON('/api/get-stats');
+    document.getElementById('stat-gui').textContent = stats.totalGuiLogs.toLocaleString();
+    document.getElementById('stat-beh').textContent = stats.totalBehaviorLogs.toLocaleString();
+    document.getElementById('stat-players').textContent = stats.uniquePlayers.toLocaleString();
+    if (stats.recentActivity && stats.recentActivity.length > 0) {
+      const latest = stats.recentActivity[0];
+      const ago = timeAgo(latest.created_at);
+      document.getElementById('stat-latest').innerHTML = `<span class="player-id">${latest.player_id}</span><br><small style="color:var(--dim)">${ago}</small>`;
+    } else {
+      document.getElementById('stat-latest').textContent = 'No data yet';
+    }
+  } catch (e) {
+    document.getElementById('stat-gui').textContent = 'Err';
+    console.error(e);
+  }
+
+  try {
+    guiLogs = await fetchJSON('/api/get-gui-logs');
+    renderGuiTable();
+  } catch (e) {
+    document.getElementById('guiTableContainer').innerHTML = '<div class="empty">Failed to load GUI logs</div>';
+  }
+
+  try {
+    behLogs = await fetchJSON('/api/get-behavior-logs');
+    renderBehTable();
+  } catch (e) {
+    document.getElementById('behTableContainer').innerHTML = '<div class="empty">Failed to load behavior logs</div>';
+  }
+}
+
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const diff = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s/60)}m ago`;
+  if (s < 86400) return `${Math.floor(s/3600)}h ago`;
+  return `${Math.floor(s/86400)}d ago`;
+}
+
+function renderGuiTable() {
+  const q = document.getElementById('guiSearch').value.toLowerCase();
+  const filtered = guiLogs.filter(r => r.player_id.toLowerCase().includes(q));
+  if (filtered.length === 0) {
+    document.getElementById('guiTableContainer').innerHTML = '<div class="empty">No GUI logs found</div>';
+    return;
+  }
+  document.getElementById('guiTableContainer').innerHTML = `
+    <table>
+    <thead><tr>
+      <th>Player ID</th><th>UI Element</th><th>Input Data</th><th>Timestamp</th>
+    </tr></thead>
+    <tbody>
+    ${filtered.map(r => `
+      <tr>
+        <td><span class="player-id">${esc(r.player_id)}</span></td>
+        <td>${esc(r.ui_element)}</td>
+        <td><span class="code" title="${escAttr(r.input_data)}">${esc(r.input_data)}</span></td>
+        <td>${timeAgo(r.created_at)}</td>
+      </tr>`).join('')}
+    </tbody></table>`;
+}
+
+function renderBehTable() {
+  const q = document.getElementById('behSearch').value.toLowerCase();
+  const filtered = behLogs.filter(r => r.player_id.toLowerCase().includes(q));
+  if (filtered.length === 0) {
+    document.getElementById('behTableContainer').innerHTML = '<div class="empty">No behavior logs found</div>';
+    return;
+  }
+  document.getElementById('behTableContainer').innerHTML = `
+    <table>
+    <thead><tr>
+      <th>Player ID</th><th>Mouse Events</th><th>Positions</th><th>Actions</th><th>Session (s)</th><th>Time</th>
+    </tr></thead>
+    <tbody>
+    ${filtered.map(r => {
+      const me = tryLen(r.mouse_events);
+      const ph = tryLen(r.position_history);
+      const bs = Array.isArray(r.behavior_sequence) ? r.behavior_sequence.slice(0,5).join(', ') : '—';
+      return `
+      <tr>
+        <td><span class="player-id">${esc(r.player_id)}</span></td>
+        <td>${me}</td>
+        <td>${ph}</td>
+        <td><span class="code">${esc(bs)}</span></td>
+        <td>${r.session_time ?? 0}</td>
+        <td>${timeAgo(r.created_at)}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>`;
+}
+
+function tryLen(v) {
+  if (Array.isArray(v)) return v.length + ' items';
+  if (typeof v === 'string') try { const p = JSON.parse(v); if (Array.isArray(p)) return p.length + ' items'; } catch(e){}
+  return '—';
+}
+
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+function exportData(type) {
+  const data = type === 'gui' ? guiLogs : behLogs;
+  if (data.length === 0) { showToast('No data to export'); return; }
+
+  let csv, filename;
+  if (type === 'gui') {
+    csv = 'player_id,ui_element,input_data,timestamp\n' +
+      data.map(r => `"${r.player_id}","${r.ui_element}","${r.input_data}","${r.created_at}"`).join('\n');
+    filename = 'gui_logs.csv';
+  } else {
+    csv = 'player_id,mouse_events,position_history,behavior_sequence,session_time,timestamp\n' +
+      data.map(r => `"${r.player_id}","${JSON.stringify(r.mouse_events)}","${JSON.stringify(r.position_history)}","${JSON.stringify(r.behavior_sequence)}",${r.session_time},"${r.created_at}"`).join('\n');
+    filename = 'behavior_logs.csv';
+  }
+
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+  showToast(`Exported ${filename}`);
+}
+
+refreshAll();
+setInterval(refreshAll, 30000);
+</script>
+
+</body>
+</html>

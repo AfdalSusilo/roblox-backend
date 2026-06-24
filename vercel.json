@@ -5,6 +5,9 @@
       "memory": 256
     }
   },
+  "rewrites": [
+    { "source": "/", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/api/(.*)",
