@@ -1,52 +1,83 @@
-# Roblox Backend – Vercel Serverless + Neon PostgreSQL
+# Roblox Backend — Vercel Serverless + Neon PostgreSQL
 
-A lightweight Node.js backend for logging **Roblox player UI inputs** and **in‑game behavior**. It runs as **Vercel Serverless Functions** and stores everything in a **Neon PostgreSQL** database.
+Backend API for Roblox game data collection + AI-powered NPC agents. Deployed on Vercel with Neon PostgreSQL.
 
----
+## Endpoints
 
-## Features
-- **POST /api/gui-input** – record GUI interactions (`playerId`, `uiElement`, `inputData`, optional `timestamp`).
-- **POST /api/player-behavior** – record mouse events, position history, behavior sequence, session time.
-- **GET /api/get‑gui‑logs** – fetch recent GUI logs (filter by `playerId`).
-- **GET /api/get‑behavior‑logs** – fetch recent behavior logs (filter by `playerId`).
-- **GET /api/get‑stats** – aggregate numbers for the dashboard.
-- **Frontend dashboard** (`/`) – real‑time stats, searchable tables, CSV export, dark theme – no external dependencies.
-- **CORS** header (`Access-Control-Allow-Origin: *`) for Roblox `HttpService` calls.
-- **Neon Serverless client** via `@neondatabase/serverless` (lightweight, works on Vercel Edge).
+### Data Collection
 
----
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/gui-input` | Record player GUI interactions |
+| `POST` | `/api/player-behavior` | Record player behavior/movement |
+| `GET` | `/api/get-stats` | Aggregate dashboard stats |
+| `GET` | `/api/get-gui-logs` | Retrieve recent GUI logs |
+| `GET` | `/api/get-behavior-logs` | Retrieve recent behavior logs |
 
-## Quick start (local)
+### AI Agent
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/ai-chat` | AI chat for Roblox NPCs |
+
+## 🤖 AI Agent Chat (Roblox NPC)
+
+Roblox agents can talk to AI via Sumopod (DeepSeek V4 Pro) or OpenRouter (free models). API keys are stored server-side on Vercel — never exposed to Roblox clients.
+
+### Lua Usage
+
+```lua
+local HttpService = game:GetService("HttpService")
+local BASE_URL = "https://roblox-backend-delta.vercel.app"
+
+local function askAI(messages, provider)
+    local payload = HttpService:JSONEncode({
+        messages = messages,
+        provider = provider or "sumopod"  -- "sumopod" or "openrouter"
+    })
+    local result = HttpService:PostAsync(BASE_URL .. "/api/ai-chat", payload)
+    local data = HttpService:JSONDecode(result)
+    return data.reply
+end
+
+-- NPC conversation
+local reply = askAI({
+    {role = "system", content = "Kamu NPC penjaga toko di game Roblox. Bicara bahasa Indonesia."},
+    {role = "user", content = "Halo, ada senjata apa hari ini?"}
+}, "sumopod")
+
+print("NPC:", reply)
+```
+
+### Providers
+
+| Provider | Model | Cost |
+|----------|-------|------|
+| `sumopod` | deepseek-v4-pro | Free (via OpenClaw) |
+| `openrouter` | google/gemma-4-26b-a4b-it:free | Free tier |
+
+## Quick Start
+
 ```bash
-# Clone the repo (public now)
 git clone https://github.com/AfdalSusilo/roblox-backend.git
 cd roblox-backend
-
-# Install deps
 npm i
-
-# Create a .env file (copy from .env.example) with your Neon URL
-cp .env.example .env
-# edit .env with your actual DATABASE_URL
-
-# Run locally (Vercel dev emulates serverless)
-npm run dev   # opens http://localhost:3000
+cp .env.example .env  # edit with Neon DATABASE_URL
+npm run dev            # http://localhost:3000
 ```
 
 ### Deploy to Vercel
-1. Go to **https://vercel.com/import** and import the repo `AfdalSusilo/roblox-backend`.
-2. Add an environment variable:
-   - **Key**: `DATABASE_URL`
-   - **Value**: the Neon connection string (`postgresql://user:pwd@...`)
-3. Click **Deploy**. Vercel will build the Node project and expose the functions under the same domain.
-4. After a successful deploy you’ll receive a URL like `https://roblox‑backend‑xxxx.vercel.app`. This URL is the **webhook** you can call from Roblox.
 
----
+1. Import repo at [vercel.com/import](https://vercel.com/import)
+2. Add env: `DATABASE_URL` = Neon connection string
+3. Deploy → get public URL
 
-## Using the endpoints from Roblox (Lua)
-```lua
-local HttpService = game:GetService("HttpService")
+### Database Setup
 
--- GUI input example
-HttpService:PostAsync(
-    "https://YOUR_VERCE_URL/api/gui
+Run `schema.sql` in Neon SQL Editor to create tables.
+
+## Security
+
+- API keys stored server-side (never in Roblox scripts)
+- CORS enabled for Roblox `HttpService`
+- Certificate pinning on AI API calls
