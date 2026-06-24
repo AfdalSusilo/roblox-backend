@@ -6,7 +6,8 @@ export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Use GET." });
 
   try {
-    const { playerId } = req.query;
+    const url = new URL(req.url, "https://dummy");
+    const playerId = url.searchParams.get("playerId");
 
     const rows = await sql`
       SELECT player_id, mouse_events, position_history, behavior_sequence,

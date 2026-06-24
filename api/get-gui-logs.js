@@ -2,17 +2,12 @@
 import sql from "../lib/db.js";
 
 export default async function handler(req, res) {
-  // ----- CORS preflight -----
-  if (req.method === "OPTIONS") {
-    return res.status(204).end();
-  }
-
-  if (req.method !== "GET") {
-    return res.status(405).json({ error: "Method not allowed. Use GET." });
-  }
+  if (req.method === "OPTIONS") return res.status(204).end();
+  if (req.method !== "GET") return res.status(405).json({ error: "Use GET." });
 
   try {
-    const { playerId } = req.query;
+    const url = new URL(req.url, "https://dummy");
+    const playerId = url.searchParams.get("playerId");
 
     const rows = await sql`
       SELECT player_id, ui_element, input_data, created_at
@@ -28,4 +23,3 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Internal server error" });
   }
 }
-
