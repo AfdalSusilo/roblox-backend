@@ -209,6 +209,9 @@
   <h2>🖱️ GUI Input Logs</h2>
   <div class="filters">
     <input type="text" id="guiSearch" placeholder="Search by Player ID/Name..." oninput="renderGuiTable()">
+    <select id="guiPlayerFilter" onchange="renderGuiTable()" style="max-width:200px">
+      <option value="">All Players</option>
+    </select>
     <input type="date" id="guiDateFilter" onchange="renderGuiTable()" style="max-width:180px">
     <button onclick="exportData('gui')" class="export">⬇ Export CSV</button>
   </div>
@@ -222,6 +225,9 @@
   <h2>🎯 Behavior Logs</h2>
   <div class="filters">
     <input type="text" id="behSearch" placeholder="Search by Player ID/Name..." oninput="renderBehTable()">
+    <select id="behPlayerFilter" onchange="renderBehTable()" style="max-width:200px">
+      <option value="">All Players</option>
+    </select>
     <input type="date" id="behDateFilter" onchange="renderBehTable()" style="max-width:180px">
     <button onclick="exportData('beh')" class="export">⬇ Export CSV</button>
   </div>
@@ -275,19 +281,73 @@ async function refreshAll() {
     console.error(e);
   }
 
+  let guiSuccess = false;
   try {
     guiLogs = await fetchJSON('/api/get-gui-logs');
-    renderGuiTable();
+    guiSuccess = true;
   } catch (e) {
     document.getElementById('guiTableContainer').innerHTML = '<div class="empty">Failed to load GUI logs</div>';
   }
 
+  let behSuccess = false;
   try {
     behLogs = await fetchJSON('/api/get-behavior-logs');
-    renderBehTable();
+    behSuccess = true;
   } catch (e) {
     document.getElementById('behTableContainer').innerHTML = '<div class="empty">Failed to load behavior logs</div>';
   }
+
+  if (guiSuccess || behSuccess) {
+    updatePlayerFilters();
+  }
+  if (guiSuccess) {
+    renderGuiTable();
+  }
+  if (behSuccess) {
+    renderBehTable();
+  }
+}
+
+function updatePlayerFilters() {
+  // Populate GUI player filter
+  const guiPlayers = {};
+  guiLogs.forEach(r => {
+    const key = r.player_id;
+    const name = r.player_name ? `${r.player_name} ${r.player_nickname ? `[${r.player_nickname}]` : ''}` : r.player_id;
+    guiPlayers[key] = name;
+  });
+  
+  const guiSel = document.getElementById('guiPlayerFilter');
+  const guiVal = guiSel.value;
+  guiSel.innerHTML = '<option value="">All Players</option>';
+  Object.keys(guiPlayers).sort().forEach(id => {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = `${guiPlayers[id]} (${id})`;
+    guiSel.appendChild(opt);
+  });
+  guiSel.value = guiVal;
+  if (!guiSel.value) guiSel.value = "";
+
+  // Populate BEH player filter
+  const behPlayers = {};
+  behLogs.forEach(r => {
+    const key = r.player_id;
+    const name = r.player_name ? `${r.player_name} ${r.player_nickname ? `[${r.player_nickname}]` : ''}` : r.player_id;
+    behPlayers[key] = name;
+  });
+  
+  const behSel = document.getElementById('behPlayerFilter');
+  const behVal = behSel.value;
+  behSel.innerHTML = '<option value="">All Players</option>';
+  Object.keys(behPlayers).sort().forEach(id => {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = `${behPlayers[id]} (${id})`;
+    behSel.appendChild(opt);
+  });
+  behSel.value = behVal;
+  if (!behSel.value) behSel.value = "";
 }
 
 function timeAgo(iso) {
@@ -315,11 +375,15 @@ async function clearAllSessions() {
 }
 
 function renderGuiTable() {
+  const selectedPlayer = document.getElementById('guiPlayerFilter').value;
   const q = document.getElementById('guiSearch').value.toLowerCase();
+  
   const filtered = guiLogs.filter(r => {
-    return r.player_id.toLowerCase().includes(q) || 
-           (r.player_name && r.player_name.toLowerCase().includes(q)) ||
-           (r.player_nickname && r.player_nickname.toLowerCase().includes(q));
+    const matchesPlayer = !selectedPlayer || r.player_id === selectedPlayer;
+    const matchesQuery = r.player_id.toLowerCase().includes(q) || 
+                         (r.player_name && r.player_name.toLowerCase().includes(q)) ||
+                         (r.player_nickname && r.player_nickname.toLowerCase().includes(q));
+    return matchesPlayer && matchesQuery;
   });
 
   if (filtered.length === 0) {
@@ -346,11 +410,15 @@ function renderGuiTable() {
 }
 
 function renderBehTable() {
+  const selectedPlayer = document.getElementById('behPlayerFilter').value;
   const q = document.getElementById('behSearch').value.toLowerCase();
+  
   const filtered = behLogs.filter(r => {
-    return r.player_id.toLowerCase().includes(q) || 
-           (r.player_name && r.player_name.toLowerCase().includes(q)) ||
-           (r.player_nickname && r.player_nickname.toLowerCase().includes(q));
+    const matchesPlayer = !selectedPlayer || r.player_id === selectedPlayer;
+    const matchesQuery = r.player_id.toLowerCase().includes(q) || 
+                         (r.player_name && r.player_name.toLowerCase().includes(q)) ||
+                         (r.player_nickname && r.player_nickname.toLowerCase().includes(q));
+    return matchesPlayer && matchesQuery;
   });
 
   if (filtered.length === 0) {
@@ -392,7 +460,12 @@ function escAttr(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,
 
 function exportData(type) {
   const dateStr = document.getElementById(type === 'gui' ? 'guiDateFilter' : 'behDateFilter').value;
+  const selectedPlayer = document.getElementById(type === 'gui' ? 'guiPlayerFilter' : 'behPlayerFilter').value;
   let data = type === 'gui' ? guiLogs : behLogs;
+
+  if (selectedPlayer) {
+    data = data.filter(r => r.player_id === selectedPlayer);
+  }
 
   if (dateStr) {
     data = data.filter(r => {
@@ -401,17 +474,18 @@ function exportData(type) {
     });
   }
 
-  if (data.length === 0) { showToast('No data found for the selected export date'); return; }
+  if (data.length === 0) { showToast('No data found for the selected export query'); return; }
 
   let csv, filename;
+  const playerSuffix = selectedPlayer ? `_${selectedPlayer}` : '';
   if (type === 'gui') {
     csv = 'player_id,player_name,player_nickname,ui_element,input_data,timestamp\n' +
       data.map(r => `"${r.player_id}","${r.player_name || ''}","${r.player_nickname || ''}","${r.ui_element}","${r.input_data.replace(/"/g, '""')}","${r.created_at}"`).join('\n');
-    filename = `gui_logs_${dateStr || 'all'}.csv`;
+    filename = `gui_logs${playerSuffix}_${dateStr || 'all'}.csv`;
   } else {
     csv = 'player_id,player_name,player_nickname,mouse_events,position_history,behavior_sequence,session_time,timestamp\n' +
       data.map(r => `"${r.player_id}","${r.player_name || ''}","${r.player_nickname || ''}","${JSON.stringify(r.mouse_events).replace(/"/g, '""')}","${JSON.stringify(r.position_history).replace(/"/g, '""')}","${JSON.stringify(r.behavior_sequence).replace(/"/g, '""')}",${r.session_time},"${r.created_at}"`).join('\n');
-    filename = `behavior_logs_${dateStr || 'all'}.csv`;
+    filename = `behavior_logs${playerSuffix}_${dateStr || 'all'}.csv`;
   }
 
   const blob = new Blob([csv], {type:'text/csv'});
