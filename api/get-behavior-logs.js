@@ -9,14 +9,19 @@ export default async function handler(req, res) {
     const url = new URL(req.url, "https://dummy");
     const playerId = url.searchParams.get("playerId");
 
-    const rows = await sql`
+    let query = `
       SELECT player_id, mouse_events, position_history, behavior_sequence,
              session_time, created_at
       FROM behavior_logs
-      ${playerId ? sql`WHERE player_id = ${playerId}` : sql``}
-      ORDER BY created_at DESC
-      LIMIT 100;
     `;
+    let params = [];
+    if (playerId) {
+      query += ` WHERE player_id = $1`;
+      params.push(playerId);
+    }
+    query += ` ORDER BY created_at DESC LIMIT 100;`;
+
+    const rows = await sql(query, params);
 
     return res.status(200).json(rows);
   } catch (err) {

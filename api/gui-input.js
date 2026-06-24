@@ -12,7 +12,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { playerId, uiElement, inputData, timestamp } = req.body ?? {};
+    let { playerId, uiElement, inputData, questionId, answerData, timestamp } = req.body ?? {};
+
+    // Map alternative keys sent by Roblox client
+    if (!uiElement && questionId) uiElement = questionId;
+    if (inputData === undefined && answerData !== undefined) inputData = answerData;
 
     // ----- validate required fields -----
     if (!playerId || !uiElement || inputData === undefined || inputData === null) {
