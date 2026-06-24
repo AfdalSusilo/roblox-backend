@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    let { playerId, uiElement, inputData, questionId, answerData, timestamp } = req.body ?? {};
+    let { playerId, playerName, playerNickname, uiElement, inputData, questionId, answerData, timestamp } = req.body ?? {};
 
     // Map alternative keys sent by Roblox client
     if (!uiElement && questionId) uiElement = questionId;
@@ -29,8 +29,8 @@ export default async function handler(req, res) {
     const ts = timestamp || new Date().toISOString();
 
     await sql`
-      INSERT INTO gui_logs (player_id, ui_element, input_data, created_at)
-      VALUES (${playerId}, ${uiElement}, ${inputData}, ${ts})
+      INSERT INTO gui_logs (player_id, player_name, player_nickname, ui_element, input_data, created_at)
+      VALUES (${playerId}, ${playerName || null}, ${playerNickname || null}, ${uiElement}, ${inputData}, ${ts})
     `;
 
     return res.status(201).json({ success: true });

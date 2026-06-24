@@ -179,6 +179,7 @@
     <small>Real-time player monitoring dashboard</small>
   </div>
   <div style="display:flex;gap:8px">
+    <button onclick="clearAllSessions()" style="background:var(--red);border:none;color:#fff;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.82rem;font-weight:600">🗑 Clear Logs</button>
     <button onclick="refreshAll()" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.82rem">🔄 Refresh</button>
   </div>
 </header>
@@ -207,7 +208,8 @@
 <div class="section">
   <h2>🖱️ GUI Input Logs</h2>
   <div class="filters">
-    <input type="text" id="guiSearch" placeholder="Search by Player ID..." oninput="renderGuiTable()">
+    <input type="text" id="guiSearch" placeholder="Search by Player ID/Name..." oninput="renderGuiTable()">
+    <input type="date" id="guiDateFilter" onchange="renderGuiTable()" style="max-width:180px">
     <button onclick="exportData('gui')" class="export">⬇ Export CSV</button>
   </div>
   <div id="guiTableContainer">
@@ -219,7 +221,8 @@
 <div class="section">
   <h2>🎯 Behavior Logs</h2>
   <div class="filters">
-    <input type="text" id="behSearch" placeholder="Search by Player ID..." oninput="renderBehTable()">
+    <input type="text" id="behSearch" placeholder="Search by Player ID/Name..." oninput="renderBehTable()">
+    <input type="date" id="behDateFilter" onchange="renderBehTable()" style="max-width:180px">
     <button onclick="exportData('beh')" class="export">⬇ Export CSV</button>
   </div>
   <div id="behTableContainer">
@@ -297,9 +300,36 @@ function timeAgo(iso) {
   return `${Math.floor(s/86400)}d ago`;
 }
 
+async function clearAllSessions() {
+  if (!confirm("Are you sure you want to clear ALL player behavior sessions and GUI logs? This action cannot be undone.")) {
+    return;
+  }
+  try {
+    const res = await fetch(`${API}/api/clear-sessions`, { method: "POST" });
+    if (!res.ok) throw new Error(`${res.status}`);
+    showToast("All logs cleared successfully!");
+    refreshAll();
+  } catch (e) {
+    showToast("Failed to clear logs: " + e.message);
+  }
+}
+
 function renderGuiTable() {
   const q = document.getElementById('guiSearch').value.toLowerCase();
-  const filtered = guiLogs.filter(r => r.player_id.toLowerCase().includes(q));
+  const dateStr = document.getElementById('guiDateFilter').value;
+  const filtered = guiLogs.filter(r => {
+    const matchesQuery = r.player_id.toLowerCase().includes(q) || 
+                         (r.player_name && r.player_name.toLowerCase().includes(q)) ||
+                         (r.player_nickname && r.player_nickname.toLowerCase().includes(q));
+    if (!matchesQuery) return false;
+    
+    if (dateStr) {
+      const recordDate = new Date(r.created_at).toISOString().split('T')[0];
+      return recordDate === dateStr;
+    }
+    return true;
+  });
+
   if (filtered.length === 0) {
     document.getElementById('guiTableContainer').innerHTML = '<div class="empty">No GUI logs found</div>';
     return;
@@ -307,22 +337,38 @@ function renderGuiTable() {
   document.getElementById('guiTableContainer').innerHTML = `
     <table>
     <thead><tr>
-      <th>Player ID</th><th>UI Element</th><th>Input Data</th><th>Timestamp</th>
+      <th>Player</th><th>UI Element</th><th>Input Data</th><th>Timestamp</th>
     </tr></thead>
     <tbody>
-    ${filtered.map(r => `
+    ${filtered.map(r => {
+      const playerText = r.player_name ? `${esc(r.player_name)} ${r.player_nickname ? `[${esc(r.player_nickname)}]` : ''}` : esc(r.player_id);
+      return `
       <tr>
-        <td><span class="player-id">${esc(r.player_id)}</span></td>
+        <td><span class="player-id" title="ID: ${escAttr(r.player_id)}">${playerText}</span></td>
         <td>${esc(r.ui_element)}</td>
         <td><span class="code" title="${escAttr(r.input_data)}">${esc(r.input_data)}</span></td>
         <td>${timeAgo(r.created_at)}</td>
-      </tr>`).join('')}
+      </tr>`;
+    }).join('')}
     </tbody></table>`;
 }
 
 function renderBehTable() {
   const q = document.getElementById('behSearch').value.toLowerCase();
-  const filtered = behLogs.filter(r => r.player_id.toLowerCase().includes(q));
+  const dateStr = document.getElementById('behDateFilter').value;
+  const filtered = behLogs.filter(r => {
+    const matchesQuery = r.player_id.toLowerCase().includes(q) || 
+                         (r.player_name && r.player_name.toLowerCase().includes(q)) ||
+                         (r.player_nickname && r.player_nickname.toLowerCase().includes(q));
+    if (!matchesQuery) return false;
+    
+    if (dateStr) {
+      const recordDate = new Date(r.created_at).toISOString().split('T')[0];
+      return recordDate === dateStr;
+    }
+    return true;
+  });
+
   if (filtered.length === 0) {
     document.getElementById('behTableContainer').innerHTML = '<div class="empty">No behavior logs found</div>';
     return;
@@ -330,16 +376,17 @@ function renderBehTable() {
   document.getElementById('behTableContainer').innerHTML = `
     <table>
     <thead><tr>
-      <th>Player ID</th><th>Mouse Events</th><th>Positions</th><th>Actions</th><th>Session (s)</th><th>Time</th>
+      <th>Player</th><th>Mouse Events</th><th>Positions</th><th>Actions</th><th>Session (s)</th><th>Time</th>
     </tr></thead>
     <tbody>
     ${filtered.map(r => {
       const me = tryLen(r.mouse_events);
       const ph = tryLen(r.position_history);
       const bs = Array.isArray(r.behavior_sequence) ? r.behavior_sequence.slice(0,5).join(', ') : '—';
+      const playerText = r.player_name ? `${esc(r.player_name)} ${r.player_nickname ? `[${esc(r.player_nickname)}]` : ''}` : esc(r.player_id);
       return `
       <tr>
-        <td><span class="player-id">${esc(r.player_id)}</span></td>
+        <td><span class="player-id" title="ID: ${escAttr(r.player_id)}">${playerText}</span></td>
         <td>${me}</td>
         <td>${ph}</td>
         <td><span class="code">${esc(bs)}</span></td>

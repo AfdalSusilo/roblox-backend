@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { playerId, mouseEvents, positionHistory, behaviorSequence, sessionTime } =
+    const { playerId, playerName, playerNickname, mouseEvents, positionHistory, behaviorSequence, sessionTime } =
       req.body ?? {};
 
     // ----- validate required fields -----
@@ -24,9 +24,11 @@ export default async function handler(req, res) {
 
     await sql`
       INSERT INTO behavior_logs
-        (player_id, mouse_events, position_history, behavior_sequence, session_time, created_at)
+        (player_id, player_name, player_nickname, mouse_events, position_history, behavior_sequence, session_time, created_at)
       VALUES (
         ${playerId},
+        ${playerName || null},
+        ${playerNickname || null},
         ${JSON.stringify(mouseEvents ?? [])},
         ${JSON.stringify(positionHistory ?? [])},
         ${JSON.stringify(behaviorSequence ?? [])},
