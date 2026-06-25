@@ -11,6 +11,12 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed. Use POST." });
   }
 
+  const apiKey = req.headers["x-api-key"];
+  const expectedKey = process.env.ADMIN_API_KEY;
+  if (expectedKey && apiKey !== expectedKey) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   try {
     console.log("Clearing all sessions and logs...");
     await sql`TRUNCATE TABLE gui_logs, behavior_logs RESTART IDENTITY CASCADE;`;

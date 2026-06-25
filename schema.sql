@@ -6,11 +6,13 @@
 
 -- Table 1: GUI input logs
 CREATE TABLE IF NOT EXISTS gui_logs (
-    id          BIGSERIAL       PRIMARY KEY,
-    player_id   TEXT            NOT NULL,
-    ui_element  TEXT            NOT NULL,
-    input_data  TEXT            NOT NULL,
-    created_at  TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+    id              BIGSERIAL       PRIMARY KEY,
+    player_id       TEXT            NOT NULL,
+    player_name     TEXT,
+    player_nickname TEXT,
+    ui_element      TEXT            NOT NULL,
+    input_data      TEXT            NOT NULL,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
 -- Index for player lookups

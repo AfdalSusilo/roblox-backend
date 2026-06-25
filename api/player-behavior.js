@@ -11,6 +11,12 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed. Use POST." });
   }
 
+  const apiKey = req.headers["x-api-key"];
+  const expectedKey = process.env.ADMIN_API_KEY;
+  if (expectedKey && apiKey !== expectedKey) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   try {
     const { id, playerId, playerName, playerNickname, mouseEvents, positionHistory, behaviorSequence, sessionTime } =
       req.body ?? {};
@@ -22,12 +28,19 @@ export default async function handler(req, res) {
       });
     }
 
+    let sequenceArray = behaviorSequence ?? [];
+    if (typeof sequenceArray === "string") {
+      sequenceArray = [sequenceArray];
+    }
+
     if (id) {
-      // Real-time update of existing session
+      // Real-time update of existing session (Delta Append)
       await sql`
         UPDATE behavior_logs
-        SET behavior_sequence = ${JSON.stringify(behaviorSequence ?? [])},
+        SET behavior_sequence = COALESCE(behavior_sequence, '[]'::jsonb) || ${JSON.stringify(sequenceArray)}::jsonb,
             session_time = ${sessionTime ?? 0},
+            mouse_events = COALESCE(mouse_events, '[]'::jsonb) || ${JSON.stringify(mouseEvents ?? [])}::jsonb,
+            position_history = COALESCE(position_history, '[]'::jsonb) || ${JSON.stringify(positionHistory ?? [])}::jsonb,
             created_at = NOW()
         WHERE id = ${id}
       `;
@@ -43,7 +56,7 @@ export default async function handler(req, res) {
           ${playerNickname || null},
           ${JSON.stringify(mouseEvents ?? [])},
           ${JSON.stringify(positionHistory ?? [])},
-          ${JSON.stringify(behaviorSequence ?? [])},
+          ${JSON.stringify(sequenceArray)},
           ${sessionTime ?? 0},
           NOW()
         )

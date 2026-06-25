@@ -10,7 +10,7 @@ export default async function handler(req, res) {
     const playerId = url.searchParams.get("playerId");
 
     let query = `
-      SELECT player_id, player_name, player_nickname, mouse_events, position_history, behavior_sequence,
+      SELECT id, player_id, player_name, player_nickname, mouse_events, position_history, behavior_sequence,
              session_time, created_at
       FROM behavior_logs
     `;

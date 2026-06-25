@@ -16,6 +16,20 @@
     --red: #e74c3c;
     --orange: #f39c12;
     --row: #14141e;
+    --code-bg: rgba(0,0,0,0.3);
+  }
+  body.light {
+    --bg: #f5f6fa;
+    --card: #ffffff;
+    --border: #dcdde1;
+    --text: #2f3640;
+    --dim: #718093;
+    --accent: #6c5ce7;
+    --green: #00b894;
+    --red: #d63031;
+    --orange: #e17055;
+    --row: #f1f2f6;
+    --code-bg: rgba(0,0,0,0.06);
   }
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
@@ -23,6 +37,7 @@
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
+    transition: background 0.3s, color 0.3s;
   }
   header {
     background: var(--card);
@@ -52,6 +67,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+    transition: background 0.3s, border 0.3s;
   }
   .stat-card .label { color: var(--dim); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; }
   .stat-card .value { font-size: 2rem; font-weight: 700; }
@@ -83,6 +99,7 @@
     border-radius: 6px;
     font-size: 0.85rem;
     outline: none;
+    transition: background 0.3s, border 0.3s;
   }
   .filters input:focus, .filters select:focus { border-color: var(--accent); }
   .filters input { flex:1; min-width: 200px; }
@@ -125,15 +142,16 @@
   .code {
     font-family: 'SF Mono', 'Fira Code', monospace;
     font-size: 0.75rem;
-    background: rgba(0,0,0,0.3);
+    background: var(--code-bg);
     padding: 2px 6px;
     border-radius: 3px;
     max-height: 40px;
     overflow: hidden;
     display: inline-block;
-    max-width: 200px;
+    max-width: 300px;
     text-overflow: ellipsis;
     white-space: nowrap;
+    vertical-align: middle;
   }
   .loading {
     text-align: center;
@@ -178,7 +196,9 @@
     <h1>🎮 Roblox Monitor</h1>
     <small>Real-time player monitoring dashboard</small>
   </div>
-  <div style="display:flex;gap:8px">
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <button onclick="toggleTheme()" id="themeToggleBtn" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;cursor:pointer;font-size:0.82rem">☀️ Light Mode</button>
+    <button onclick="changeApiKey()" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;cursor:pointer;font-size:0.82rem">🔑 Key Manager</button>
     <button onclick="clearAllSessions()" style="background:var(--red);border:none;color:#fff;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.82rem;font-weight:600">🗑 Clear Logs</button>
     <button onclick="refreshAll()" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.82rem">🔄 Refresh</button>
   </div>
@@ -201,6 +221,21 @@
   <div class="stat-card">
     <span class="label">Latest Activity</span>
     <span class="value" style="font-size:0.9rem" id="stat-latest">—</span>
+  </div>
+</div>
+
+<!-- NPC Interactions -->
+<div class="section">
+  <h2>🗣️ NPC Interactions</h2>
+  <div class="filters">
+    <input type="text" id="npcSearch" placeholder="Search by Player ID/Name or NPC..." oninput="renderNpcTable()">
+    <select id="npcPlayerFilter" onchange="renderNpcTable()" style="max-width:200px">
+      <option value="">All Players</option>
+    </select>
+    <button onclick="exportData('npc')" class="export">⬇ Export CSV</button>
+  </div>
+  <div id="npcTableContainer">
+    <div class="loading">Loading...</div>
   </div>
 </div>
 
@@ -236,6 +271,17 @@
   </div>
 </div>
 
+<!-- Custom Modal -->
+<div id="detailModal" style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.6); backdrop-filter:blur(4px); align-items:center; justify-content:center;">
+  <div style="background:var(--card); border:1px solid var(--border); padding:24px; border-radius:12px; max-width:600px; width:90%; max-height:80vh; display:flex; flex-direction:column; gap:16px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
+      <h3 id="modalTitle" style="color:var(--accent)">Raw Coordinate Data</h3>
+      <button onclick="closeModal()" style="background:var(--red); border:none; color:#fff; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:0.8rem; font-weight:600;">Close</button>
+    </div>
+    <div id="modalBody" style="overflow-y:auto; font-family:monospace; font-size:0.75rem; background:rgba(0,0,0,0.2); padding:12px; border-radius:6px; white-space:pre-wrap; max-height:60vh; border:1px solid var(--border);"></div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -251,18 +297,90 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2000);
 }
 
+// Prompt for API key if missing
+let apiKey = localStorage.getItem('admin_api_key');
+if (!apiKey) {
+  apiKey = prompt("Please enter the Admin API Key to access the dashboard:");
+  if (apiKey) {
+    localStorage.setItem('admin_api_key', apiKey);
+  }
+}
+
 async function fetchJSON(path) {
-  const res = await fetch(`${API}${path}`);
+  const res = await fetch(`${API}${path}`, {
+    headers: {
+      "x-api-key": localStorage.getItem('admin_api_key') || ""
+    }
+  });
+  if (res.status === 401) {
+    localStorage.removeItem('admin_api_key');
+    showToast("API Key salah atau tidak terotorisasi!");
+    setTimeout(() => window.location.reload(), 1500);
+    throw new Error("Unauthorized");
+  }
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
 }
 
+function changeApiKey() {
+  const newKey = prompt("Masukkan API Key baru:", localStorage.getItem('admin_api_key') || "");
+  if (newKey !== null) {
+    localStorage.setItem('admin_api_key', newKey);
+    showToast("API Key diperbarui. Memuat ulang...");
+    setTimeout(() => window.location.reload(), 1000);
+  }
+}
+
+// ==========================================
+// THEME SWITCHER
+// ==========================================
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  updateThemeUI();
+}
+
+function updateThemeUI() {
+  const isLight = document.body.classList.contains('light');
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) {
+    btn.textContent = isLight ? '🌙 Dark Mode' : '☀️ Light Mode';
+  }
+}
+
+// On load theme check
+if (localStorage.getItem('theme') === 'light') {
+  document.body.classList.add('light');
+  updateThemeUI();
+}
+
+// ==========================================
+// MODAL DIALOG
+// ==========================================
+function showModal(title, content, isHtml = false) {
+  document.getElementById('modalTitle').textContent = title;
+  const body = document.getElementById('modalBody');
+  if (isHtml) {
+    body.innerHTML = content;
+  } else {
+    body.textContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+  }
+  document.getElementById('detailModal').style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('detailModal').style.display = 'none';
+}
+
 async function refreshAll() {
+  if (!localStorage.getItem('admin_api_key')) return;
+  
   document.getElementById('stat-gui').textContent = '...';
   document.getElementById('stat-beh').textContent = '...';
   document.getElementById('stat-players').textContent = '...';
   document.getElementById('guiTableContainer').innerHTML = '<div class="loading">Loading...</div>';
   document.getElementById('behTableContainer').innerHTML = '<div class="loading">Loading...</div>';
+  document.getElementById('npcTableContainer').innerHTML = '<div class="loading">Loading...</div>';
 
   try {
     const stats = await fetchJSON('/api/get-stats');
@@ -287,6 +405,7 @@ async function refreshAll() {
     guiSuccess = true;
   } catch (e) {
     document.getElementById('guiTableContainer').innerHTML = '<div class="empty">Failed to load GUI logs</div>';
+    document.getElementById('npcTableContainer').innerHTML = '<div class="empty">Failed to load NPC chats</div>';
   }
 
   let behSuccess = false;
@@ -302,6 +421,7 @@ async function refreshAll() {
   }
   if (guiSuccess) {
     renderGuiTable();
+    renderNpcTable();
   }
   if (behSuccess) {
     renderBehTable();
@@ -309,12 +429,14 @@ async function refreshAll() {
 }
 
 function updatePlayerFilters() {
-  // Populate GUI player filter
+  // GUI filter (excluding NPC_Chat logs)
   const guiPlayers = {};
   guiLogs.forEach(r => {
-    const key = r.player_id;
-    const name = r.player_name ? `${r.player_name} ${r.player_nickname ? `[${r.player_nickname}]` : ''}` : r.player_id;
-    guiPlayers[key] = name;
+    if (r.ui_element !== 'NPC_Chat') {
+      const key = r.player_id;
+      const name = r.player_name ? `${r.player_name} ${r.player_nickname ? `[${r.player_nickname}]` : ''}` : r.player_id;
+      guiPlayers[key] = name;
+    }
   });
   
   const guiSel = document.getElementById('guiPlayerFilter');
@@ -329,7 +451,29 @@ function updatePlayerFilters() {
   guiSel.value = guiVal;
   if (!guiSel.value) guiSel.value = "";
 
-  // Populate BEH player filter
+  // NPC filter
+  const npcPlayers = {};
+  guiLogs.forEach(r => {
+    if (r.ui_element === 'NPC_Chat') {
+      const key = r.player_id;
+      const name = r.player_name ? `${r.player_name} ${r.player_nickname ? `[${r.player_nickname}]` : ''}` : r.player_id;
+      npcPlayers[key] = name;
+    }
+  });
+  
+  const npcSel = document.getElementById('npcPlayerFilter');
+  const npcVal = npcSel.value;
+  npcSel.innerHTML = '<option value="">All Players</option>';
+  Object.keys(npcPlayers).sort().forEach(id => {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = `${npcPlayers[id]} (${id})`;
+    npcSel.appendChild(opt);
+  });
+  npcSel.value = npcVal;
+  if (!npcSel.value) npcSel.value = "";
+
+  // BEH player filter
   const behPlayers = {};
   behLogs.forEach(r => {
     const key = r.player_id;
@@ -365,7 +509,18 @@ async function clearAllSessions() {
     return;
   }
   try {
-    const res = await fetch(`${API}/api/clear-sessions`, { method: "POST" });
+    const res = await fetch(`${API}/api/clear-sessions`, {
+      method: "POST",
+      headers: {
+        "x-api-key": localStorage.getItem('admin_api_key') || ""
+      }
+    });
+    if (res.status === 401) {
+      localStorage.removeItem('admin_api_key');
+      showToast("API Key salah atau tidak terotorisasi!");
+      setTimeout(() => window.location.reload(), 1500);
+      return;
+    }
     if (!res.ok) throw new Error(`${res.status}`);
     showToast("All logs cleared successfully!");
     refreshAll();
@@ -374,16 +529,93 @@ async function clearAllSessions() {
   }
 }
 
+// ==========================================
+// NPC LOGS RENDER
+// ==========================================
+function renderNpcTable() {
+  const selectedPlayer = document.getElementById('npcPlayerFilter').value;
+  const q = document.getElementById('npcSearch').value.toLowerCase();
+  
+  const npcLogs = guiLogs.filter(r => r.ui_element === 'NPC_Chat');
+  
+  const filtered = npcLogs.filter(r => {
+    let chatData = {};
+    try { chatData = JSON.parse(r.input_data); } catch(e){}
+    const npcName = chatData.npcTarget || '';
+    
+    const matchesPlayer = !selectedPlayer || r.player_id === selectedPlayer;
+    const matchesQuery = r.player_id.toLowerCase().includes(q) || 
+                         (r.player_name && r.player_name.toLowerCase().includes(q)) ||
+                         (r.player_nickname && r.player_nickname.toLowerCase().includes(q)) ||
+                         npcName.toLowerCase().includes(q);
+    return matchesPlayer && matchesQuery;
+  });
+
+  if (filtered.length === 0) {
+    document.getElementById('npcTableContainer').innerHTML = '<div class="empty">No NPC interactions found</div>';
+    return;
+  }
+  
+  document.getElementById('npcTableContainer').innerHTML = `
+    <table>
+    <thead><tr>
+      <th>Player</th><th>NPC Target</th><th>Last Chat Snippet</th><th>Timestamp</th><th>Actions</th>
+    </tr></thead>
+    <tbody>
+    ${filtered.map((r, index) => {
+      let chatData = {};
+      try { chatData = JSON.parse(r.input_data); } catch(e){}
+      const npcTarget = chatData.npcTarget || 'Unknown';
+      const userMsg = chatData.chatHistory && chatData.chatHistory[0] ? chatData.chatHistory[0].content : '—';
+      const aiMsg = chatData.chatHistory && chatData.chatHistory[1] ? chatData.chatHistory[1].content : '—';
+      
+      const playerText = r.player_name ? `${esc(r.player_name)} ${r.player_nickname ? `[${esc(r.player_nickname)}]` : ''}` : esc(r.player_id);
+      const snippet = `User: "${userMsg}" | AI: "${aiMsg}"`;
+      
+      return `
+      <tr>
+        <td><span class="player-id" title="ID: ${escAttr(r.player_id)}">${playerText}</span></td>
+        <td><span style="font-weight:600; color:var(--orange);">${esc(npcTarget)}</span></td>
+        <td><span class="code" title="${escAttr(snippet)}" style="max-width:320px;">${esc(snippet)}</span></td>
+        <td>${timeAgo(r.created_at)}</td>
+        <td>
+          <button onclick="showNpcChatDetail('${escAttr(r.player_id)}', '${escAttr(npcTarget)}', '${escAttr(userMsg)}', '${escAttr(aiMsg)}')" style="background:var(--card); border:1px solid var(--border); color:var(--accent); padding:4px 10px; border-radius:4px; font-size:0.75rem; cursor:pointer; font-weight:600;">View History</button>
+        </td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>`;
+}
+
+function showNpcChatDetail(playerId, npcTarget, userMsg, aiMsg) {
+  const html = `
+    <div style="display:flex; flex-direction:column; gap:12px; margin-top:10px;">
+      <div style="background:rgba(108,92,231,0.1); border-left:4px solid var(--accent); padding:10px; border-radius:4px;">
+        <strong style="color:var(--accent);">Siswa (ID: ${esc(playerId)}):</strong>
+        <p style="margin-top:4px; line-height:1.4; color:var(--text); font-family:sans-serif;">${esc(userMsg)}</p>
+      </div>
+      <div style="background:rgba(243,156,18,0.1); border-left:4px solid var(--orange); padding:10px; border-radius:4px;">
+        <strong style="color:var(--orange);">${esc(npcTarget)}:</strong>
+        <p style="margin-top:4px; line-height:1.4; color:var(--text); font-family:sans-serif;">${esc(aiMsg)}</p>
+      </div>
+    </div>
+  `;
+  showModal(`NPC Chat History - ${npcTarget}`, html, true);
+}
+
+// ==========================================
+// GUI LOGS RENDER
+// ==========================================
 function renderGuiTable() {
   const selectedPlayer = document.getElementById('guiPlayerFilter').value;
   const q = document.getElementById('guiSearch').value.toLowerCase();
   
   const filtered = guiLogs.filter(r => {
+    const matchesNpc = r.ui_element !== 'NPC_Chat'; // Exclude NPC chats
     const matchesPlayer = !selectedPlayer || r.player_id === selectedPlayer;
     const matchesQuery = r.player_id.toLowerCase().includes(q) || 
                          (r.player_name && r.player_name.toLowerCase().includes(q)) ||
                          (r.player_nickname && r.player_nickname.toLowerCase().includes(q));
-    return matchesPlayer && matchesQuery;
+    return matchesNpc && matchesPlayer && matchesQuery;
   });
 
   if (filtered.length === 0) {
@@ -409,6 +641,57 @@ function renderGuiTable() {
     </tbody></table>`;
 }
 
+// ==========================================
+// BEHAVIOR LOGS RENDER
+// ==========================================
+function getMouseSummary(v) {
+  let arr = [];
+  if (Array.isArray(v)) arr = v;
+  else if (typeof v === 'string') {
+    try { arr = JSON.parse(v); } catch(e){}
+  }
+  if (!Array.isArray(arr) || arr.length === 0) return '0 clicks, 0 logs';
+  const clicks = arr.filter(e => e.type === 'click' || e.click === true || e.button !== undefined).length;
+  const moves = arr.length - clicks;
+  return `${clicks} clicks, ${moves} move logs`;
+}
+
+function getPosSummary(v) {
+  let arr = [];
+  if (Array.isArray(v)) arr = v;
+  else if (typeof v === 'string') {
+    try { arr = JSON.parse(v); } catch(e){}
+  }
+  if (!Array.isArray(arr) || arr.length === 0) return '0 positions';
+  return `${arr.length} positions`;
+}
+
+function showMouseDetail(idx) {
+  const log = behLogs[idx];
+  if (log) {
+    let arr = [];
+    if (Array.isArray(log.mouse_events)) arr = log.mouse_events;
+    else {
+      try { arr = JSON.parse(log.mouse_events); } catch(e){}
+    }
+    const formatted = arr.map(e => `[${new Date(e.timestamp * 1000).toLocaleTimeString()}] Type: ${e.type || 'click'}, Pos: (${e.x ?? 0}, ${e.y ?? 0})`).join('\n');
+    showModal(`Mouse Events - Player ${log.player_id}`, formatted || 'No coordinates recorded.');
+  }
+}
+
+function showPosDetail(idx) {
+  const log = behLogs[idx];
+  if (log) {
+    let arr = [];
+    if (Array.isArray(log.position_history)) arr = log.position_history;
+    else {
+      try { arr = JSON.parse(log.position_history); } catch(e){}
+    }
+    const formatted = arr.map(e => `[${new Date(e.timestamp * 1000).toLocaleTimeString()}] Pos: (${Math.round(e.x ?? 0)}, ${Math.round(e.y ?? 0)}, ${Math.round(e.z ?? 0)})`).join('\n');
+    showModal(`Position History - Player ${log.player_id}`, formatted || 'No position coordinates recorded.');
+  }
+}
+
 function renderBehTable() {
   const selectedPlayer = document.getElementById('behPlayerFilter').value;
   const q = document.getElementById('behSearch').value.toLowerCase();
@@ -428,20 +711,27 @@ function renderBehTable() {
   document.getElementById('behTableContainer').innerHTML = `
     <table>
     <thead><tr>
-      <th>Player</th><th>Mouse Events</th><th>Positions</th><th>Actions</th><th>Session (s)</th><th>Time</th>
+      <th>Player</th><th>Mouse Events</th><th>Positions</th><th>Actions (LSA)</th><th>Session (s)</th><th>Time</th>
     </tr></thead>
     <tbody>
-    ${filtered.map(r => {
-      const me = tryLen(r.mouse_events);
-      const ph = tryLen(r.position_history);
-      const bs = Array.isArray(r.behavior_sequence) ? r.behavior_sequence.slice(0,5).join(', ') : '—';
+    ${filtered.map((r, index) => {
+      const bs = Array.isArray(r.behavior_sequence) ? r.behavior_sequence.join(', ') : '—';
       const playerText = r.player_name ? `${esc(r.player_name)} ${r.player_nickname ? `[${esc(r.player_nickname)}]` : ''}` : esc(r.player_id);
+      
+      const globalIdx = behLogs.findIndex(item => item.id === r.id);
+      
       return `
       <tr>
         <td><span class="player-id" title="ID: ${escAttr(r.player_id)}">${playerText}</span></td>
-        <td>${me}</td>
-        <td>${ph}</td>
-        <td><span class="code">${esc(bs)}</span></td>
+        <td>
+          <span>${getMouseSummary(r.mouse_events)}</span>
+          <button onclick="showMouseDetail(${globalIdx})" style="background:var(--card); border:1px solid var(--border); color:var(--accent); padding:2px 6px; border-radius:4px; font-size:0.7rem; cursor:pointer; margin-left:6px; font-weight:600;">View</button>
+        </td>
+        <td>
+          <span>${getPosSummary(r.position_history)}</span>
+          <button onclick="showPosDetail(${globalIdx})" style="background:var(--card); border:1px solid var(--border); color:var(--accent); padding:2px 6px; border-radius:4px; font-size:0.7rem; cursor:pointer; margin-left:6px; font-weight:600;">View</button>
+        </td>
+        <td><span class="code" style="max-width:200px;">${esc(bs)}</span></td>
         <td>${r.session_time ?? 0}</td>
         <td>${timeAgo(r.created_at)}</td>
       </tr>`;
@@ -449,25 +739,77 @@ function renderBehTable() {
     </tbody></table>`;
 }
 
-function tryLen(v) {
-  if (Array.isArray(v)) return v.length + ' items';
-  if (typeof v === 'string') try { const p = JSON.parse(v); if (Array.isArray(p)) return p.length + ' items'; } catch(e){}
-  return '—';
-}
-
 function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function escAttr(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
+function formatInputDataForCsv(uiElement, rawData) {
+  if (!rawData) return '';
+  try {
+    const parsed = JSON.parse(rawData);
+    if (typeof parsed === 'object' && parsed !== null) {
+      if (parsed.npcTarget && parsed.chatHistory) {
+        const userMsg = parsed.chatHistory[0] ? parsed.chatHistory[0].content : '';
+        const aiMsg = parsed.chatHistory[1] ? parsed.chatHistory[1].content : '';
+        return `Target NPC: ${parsed.npcTarget} | User: "${userMsg}" | AI: "${aiMsg}"`;
+      }
+      const parts = [];
+      for (const [k, v] of Object.entries(parsed)) {
+        if (v !== undefined && v !== null && v !== "") {
+          parts.push(`${k}: "${v}"`);
+        }
+      }
+      return parts.join(', ');
+    }
+  } catch (e) {}
+  return rawData;
+}
+
+// ==========================================
+// EXPORT CSV LOGIC
+// ==========================================
 function exportData(type) {
-  const dateStr = document.getElementById(type === 'gui' ? 'guiDateFilter' : 'behDateFilter').value;
-  const selectedPlayer = document.getElementById(type === 'gui' ? 'guiPlayerFilter' : 'behPlayerFilter').value;
-  let data = type === 'gui' ? guiLogs : behLogs;
+  const selectedPlayer = document.getElementById(
+    type === 'gui' ? 'guiPlayerFilter' : (type === 'beh' ? 'behPlayerFilter' : 'npcPlayerFilter')
+  ).value;
+  
+  const q = document.getElementById(
+    type === 'gui' ? 'guiSearch' : (type === 'beh' ? 'behSearch' : 'npcSearch')
+  ).value.toLowerCase();
+
+  const dateStr = document.getElementById(
+    type === 'gui' ? 'guiDateFilter' : (type === 'beh' ? 'behDateFilter' : 'guiDateFilter')
+  )?.value;
+
+  let data = [];
+  if (type === 'gui') {
+    data = guiLogs.filter(r => r.ui_element !== 'NPC_Chat');
+  } else if (type === 'beh') {
+    data = behLogs;
+  } else if (type === 'npc') {
+    data = guiLogs.filter(r => r.ui_element === 'NPC_Chat');
+  }
 
   if (selectedPlayer) {
     data = data.filter(r => r.player_id === selectedPlayer);
   }
 
-  if (dateStr) {
+  if (q) {
+    data = data.filter(r => {
+      let extraMatch = false;
+      if (type === 'npc') {
+        let chatData = {};
+        try { chatData = JSON.parse(r.input_data); } catch(e){}
+        const npcName = chatData.npcTarget || '';
+        extraMatch = npcName.toLowerCase().includes(q);
+      }
+      return r.player_id.toLowerCase().includes(q) || 
+             (r.player_name && r.player_name.toLowerCase().includes(q)) ||
+             (r.player_nickname && r.player_nickname.toLowerCase().includes(q)) ||
+             extraMatch;
+    });
+  }
+
+  if (dateStr && type !== 'npc') {
     data = data.filter(r => {
       const recordDate = new Date(r.created_at).toISOString().split('T')[0];
       return recordDate === dateStr;
@@ -478,14 +820,34 @@ function exportData(type) {
 
   let csv, filename;
   const playerSuffix = selectedPlayer ? `_${selectedPlayer}` : '';
+  
   if (type === 'gui') {
     csv = 'player_id,player_name,player_nickname,ui_element,input_data,timestamp\n' +
-      data.map(r => `"${r.player_id}","${r.player_name || ''}","${r.player_nickname || ''}","${r.ui_element}","${r.input_data.replace(/"/g, '""')}","${r.created_at}"`).join('\n');
+      data.map(r => {
+        const formattedData = formatInputDataForCsv(r.ui_element, r.input_data);
+        return `"${r.player_id}","${r.player_name || ''}","${r.player_nickname || ''}","${r.ui_element}","${formattedData.replace(/"/g, '""')}","${r.created_at}"`;
+      }).join('\n');
     filename = `gui_logs${playerSuffix}_${dateStr || 'all'}.csv`;
-  } else {
+  } else if (type === 'beh') {
     csv = 'player_id,player_name,player_nickname,mouse_events,position_history,behavior_sequence,session_time,timestamp\n' +
-      data.map(r => `"${r.player_id}","${r.player_name || ''}","${r.player_nickname || ''}","${JSON.stringify(r.mouse_events).replace(/"/g, '""')}","${JSON.stringify(r.position_history).replace(/"/g, '""')}","${JSON.stringify(r.behavior_sequence).replace(/"/g, '""')}",${r.session_time},"${r.created_at}"`).join('\n');
+      data.map(r => {
+        const mouseSummary = getMouseSummary(r.mouse_events);
+        const posSummary = getPosSummary(r.position_history);
+        const seqSummary = Array.isArray(r.behavior_sequence) ? r.behavior_sequence.join(', ') : (typeof r.behavior_sequence === 'string' ? r.behavior_sequence : '');
+        return `"${r.player_id}","${r.player_name || ''}","${r.player_nickname || ''}","${mouseSummary.replace(/"/g, '""')}","${posSummary.replace(/"/g, '""')}","${seqSummary.replace(/"/g, '""')}",${r.session_time || 0},"${r.created_at}"`;
+      }).join('\n');
     filename = `behavior_logs${playerSuffix}_${dateStr || 'all'}.csv`;
+  } else if (type === 'npc') {
+    csv = 'player_id,player_name,player_nickname,npc_target,user_message,ai_response,timestamp\n' +
+      data.map(r => {
+        let chatData = {};
+        try { chatData = JSON.parse(r.input_data); } catch(e){}
+        const npcTarget = chatData.npcTarget || 'Unknown';
+        const userMsg = chatData.chatHistory && chatData.chatHistory[0] ? chatData.chatHistory[0].content : '';
+        const aiResponse = chatData.chatHistory && chatData.chatHistory[1] ? chatData.chatHistory[1].content : '';
+        return `"${r.player_id}","${r.player_name || ''}","${r.player_nickname || ''}","${npcTarget.replace(/"/g, '""')}","${userMsg.replace(/"/g, '""')}","${aiResponse.replace(/"/g, '""')}","${r.created_at}"`;
+      }).join('\n');
+    filename = `npc_interactions${playerSuffix}.csv`;
   }
 
   const blob = new Blob([csv], {type:'text/csv'});
@@ -502,7 +864,7 @@ document.getElementById('guiDateFilter').value = today;
 document.getElementById('behDateFilter').value = today;
 
 refreshAll();
-setInterval(refreshAll, 30000);
+setInterval(refreshAll, 15000); // Poll every 15 seconds for snappier real-time update
 </script>
 
 </body>
