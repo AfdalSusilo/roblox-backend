@@ -822,32 +822,80 @@ function exportData(type) {
   const playerSuffix = selectedPlayer ? `_${selectedPlayer}` : '';
   
   if (type === 'gui') {
-    csv = 'player_id,player_name,player_nickname,ui_element,input_data,timestamp\n' +
-      data.map(r => {
-        const formattedData = formatInputDataForCsv(r.ui_element, r.input_data);
-        return `"${r.player_id}","${r.player_name || ''}","${r.player_nickname || ''}","${r.ui_element}","${formattedData.replace(/"/g, '""')}","${r.created_at}"`;
-      }).join('\n');
-    filename = `gui_logs${playerSuffix}_${dateStr || 'all'}.csv`;
+    csv = 'player_id,player_name,ui_element,input_key,input_value,timestamp\n';
+    const rows = [];
+    data.forEach(r => {
+      let parsed = null;
+      try {
+        parsed = JSON.parse(r.input_data);
+      } catch (e) {}
+
+      if (parsed && typeof parsed === 'object' && parsed !== null) {
+        for (const [k, v] of Object.entries(parsed)) {
+          if (v !== undefined && v !== null && v !== "") {
+            rows.push(`"${r.player_id}","${r.player_name || ''}","${r.ui_element}","${k.replace(/"/g, '""')}","${String(v).replace(/"/g, '""')}","${r.created_at}"`);
+          }
+        }
+      } else {
+        rows.push(`"${r.player_id}","${r.player_name || ''}","${r.ui_element}","","${r.input_data.replace(/"/g, '""')}","${r.created_at}"`);
+      }
+    });
+    csv += rows.join('\n');
+    filename = `gui_logs_flattened${playerSuffix}_${dateStr || 'all'}.csv`;
   } else if (type === 'beh') {
-    csv = 'player_id,player_name,player_nickname,mouse_events,position_history,behavior_sequence,session_time,timestamp\n' +
-      data.map(r => {
-        const mouseSummary = getMouseSummary(r.mouse_events);
-        const posSummary = getPosSummary(r.position_history);
-        const seqSummary = Array.isArray(r.behavior_sequence) ? r.behavior_sequence.join(', ') : (typeof r.behavior_sequence === 'string' ? r.behavior_sequence : '');
-        return `"${r.player_id}","${r.player_name || ''}","${r.player_nickname || ''}","${mouseSummary.replace(/"/g, '""')}","${posSummary.replace(/"/g, '""')}","${seqSummary.replace(/"/g, '""')}",${r.session_time || 0},"${r.created_at}"`;
-      }).join('\n');
-    filename = `behavior_logs${playerSuffix}_${dateStr || 'all'}.csv`;
+    csv = 'player_id,player_name,event_type,x,y,z,timestamp,behavior_code\n';
+    const rows = [];
+    data.forEach(r => {
+      let mouseEvents = [];
+      try {
+        mouseEvents = typeof r.mouse_events === 'string' ? JSON.parse(r.mouse_events) : (r.mouse_events || []);
+      } catch(e){}
+      let posHistory = [];
+      try {
+        posHistory = typeof r.position_history === 'string' ? JSON.parse(r.position_history) : (r.position_history || []);
+      } catch(e){}
+      
+      const behaviorCode = Array.isArray(r.behavior_sequence) ? r.behavior_sequence.join(', ') : (r.behavior_sequence || '');
+      
+      if (Array.isArray(mouseEvents)) {
+        mouseEvents.forEach(m => {
+          const typeStr = m.type || (m.click ? 'click' : 'move');
+          const ts = m.timestamp ? new Date(m.timestamp * 1000).toISOString() : '';
+          rows.push(`"${r.player_id}","${r.player_name || ''}","${typeStr}",${m.x ?? ''},${m.y ?? ''},,${ts},"${behaviorCode.replace(/"/g, '""')}"`);
+        });
+      }
+      
+      if (Array.isArray(posHistory)) {
+        posHistory.forEach(p => {
+          const ts = p.timestamp ? new Date(p.timestamp * 1000).toISOString() : '';
+          rows.push(`"${r.player_id}","${r.player_name || ''}","position",${p.x ?? ''},${p.y ?? ''},${p.z ?? ''},${ts},"${behaviorCode.replace(/"/g, '""')}"`);
+        });
+      }
+    });
+    csv += rows.join('\n');
+    filename = `behavior_logs_flattened${playerSuffix}_${dateStr || 'all'}.csv`;
   } else if (type === 'npc') {
-    csv = 'player_id,player_name,player_nickname,npc_target,user_message,ai_response,timestamp\n' +
-      data.map(r => {
-        let chatData = {};
-        try { chatData = JSON.parse(r.input_data); } catch(e){}
-        const npcTarget = chatData.npcTarget || 'Unknown';
-        const userMsg = chatData.chatHistory && chatData.chatHistory[0] ? chatData.chatHistory[0].content : '';
-        const aiResponse = chatData.chatHistory && chatData.chatHistory[1] ? chatData.chatHistory[1].content : '';
-        return `"${r.player_id}","${r.player_name || ''}","${r.player_nickname || ''}","${npcTarget.replace(/"/g, '""')}","${userMsg.replace(/"/g, '""')}","${aiResponse.replace(/"/g, '""')}","${r.created_at}"`;
-      }).join('\n');
-    filename = `npc_interactions${playerSuffix}.csv`;
+    csv = 'player_id,player_name,npc_target,role,message_content,timestamp\n';
+    const rows = [];
+    data.forEach(r => {
+      let chatData = {};
+      try {
+        chatData = JSON.parse(r.input_data);
+      } catch (e) {}
+      
+      const npcTarget = chatData.npcTarget || 'Unknown';
+      const history = chatData.chatHistory || [];
+      
+      if (Array.isArray(history)) {
+        history.forEach(msg => {
+          const role = msg.role || '';
+          const content = msg.content || '';
+          rows.push(`"${r.player_id}","${r.player_name || ''}","${npcTarget.replace(/"/g, '""')}","${role.replace(/"/g, '""')}","${content.replace(/"/g, '""')}","${r.created_at}"`);
+        });
+      }
+    });
+    csv += rows.join('\n');
+    filename = `npc_interactions_flattened${playerSuffix}.csv`;
   }
 
   const blob = new Blob([csv], {type:'text/csv'});
