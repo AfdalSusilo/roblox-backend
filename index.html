@@ -836,26 +836,73 @@ function exportData(type) {
   const playerSuffix = selectedPlayer ? `_${selectedPlayer}` : '';
   
   if (type === 'gui') {
-    csv = 'player_id,player_name,ui_element,input_key,input_value,timestamp\n';
-    const rows = [];
-    data.forEach(r => {
+    // 1. Scan all data to find all unique keys in parsed input_data JSON
+    const uniqueKeysSet = new Set();
+    const parsedRows = data.map(r => {
       let parsed = null;
       try {
         parsed = JSON.parse(r.input_data);
       } catch (e) {}
-
+      
+      // If it's a valid object, collect all keys
       if (parsed && typeof parsed === 'object' && parsed !== null) {
-        for (const [k, v] of Object.entries(parsed)) {
-          if (v !== undefined && v !== null && v !== "") {
-            rows.push(`"${r.player_id}","${r.player_name || ''}","${r.ui_element}","${k.replace(/"/g, '""')}","${String(v).replace(/"/g, '""')}","${r.created_at}"`);
-          }
-        }
-      } else {
-        rows.push(`"${r.player_id}","${r.player_name || ''}","${r.ui_element}","","${r.input_data.replace(/"/g, '""')}","${r.created_at}"`);
+        Object.keys(parsed).forEach(k => uniqueKeysSet.add(k));
       }
+      return { row: r, parsed };
     });
+
+    const uniqueKeys = Array.from(uniqueKeysSet).sort();
+
+    // 2. Build CSV Headers
+    // Base headers: player_id, player_name, player_nickname, ui_element, input_data, timestamp
+    // Followed by: input_data.key1, input_data.key2, ...
+    let headers = ['player_id', 'player_name', 'player_nickname', 'ui_element', 'input_data', 'timestamp'];
+    uniqueKeys.forEach(k => {
+      headers.push(`input_data.${k}`);
+    });
+    csv = headers.map(h => `"${h}"`).join(',') + '\n';
+
+    // 3. Build CSV Rows
+    const rows = [];
+    parsedRows.forEach(({ row: r, parsed }) => {
+      const rowValues = [];
+      // Base values
+      rowValues.push(r.player_id);
+      rowValues.push(r.player_name || '');
+      rowValues.push(r.player_nickname || '');
+      rowValues.push(r.ui_element);
+      
+      // input_data base column:
+      // If it is NOT a JSON object, put the raw string. If it is JSON, put empty (or raw JSON if preferred, screenshot shows empty for JSON objects)
+      if (parsed && typeof parsed === 'object' && parsed !== null) {
+        rowValues.push('');
+      } else {
+        rowValues.push(r.input_data || '');
+      }
+      
+      rowValues.push(r.created_at);
+
+      // Add values for each dynamic key column
+      uniqueKeys.forEach(k => {
+        if (parsed && typeof parsed === 'object' && parsed !== null && parsed[k] !== undefined) {
+          const val = parsed[k];
+          if (val === true) {
+            rowValues.push('✓');
+          } else if (val === false) {
+            rowValues.push('');
+          } else {
+            rowValues.push(String(val));
+          }
+        } else {
+          rowValues.push('');
+        }
+      });
+
+      rows.push(rowValues.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+    });
+
     csv += rows.join('\n');
-    filename = `gui_logs_flattened${playerSuffix}_${dateStr || 'all'}.csv`;
+    filename = `gui_logs_${playerSuffix}_${dateStr || 'all'}.csv`;
   } else if (type === 'beh') {
     csv = 'player_id,player_name,event_type,x,y,z,timestamp,behavior_code\n';
     const rows = [];
