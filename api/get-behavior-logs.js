@@ -1,5 +1,5 @@
 // api/get-behavior-logs.js — GET endpoint to retrieve recent behavior logs
-import sql from "../lib/db.js";
+import pool from "../lib/db.js";
 
 export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(204).end();
@@ -14,16 +14,16 @@ export default async function handler(req, res) {
              session_time, created_at
       FROM behavior_logs
     `;
-    let params = [];
+    const params = [];
     if (playerId) {
       query += ` WHERE player_id = $1`;
       params.push(playerId);
     }
     query += ` ORDER BY created_at DESC LIMIT 100;`;
 
-    const rows = await sql(query, params);
+    const result = await pool.query(query, params);
 
-    return res.status(200).json(rows);
+    return res.status(200).json(result.rows);
   } catch (err) {
     console.error("get-behavior-logs error:", err);
     return res.status(500).json({ error: "Internal server error" });

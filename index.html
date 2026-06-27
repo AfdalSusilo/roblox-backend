@@ -31,6 +31,17 @@
     --row: #f1f2f6;
     --code-bg: rgba(0,0,0,0.06);
   }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .row-new {
+    animation: fadeIn 0.4s ease;
+  }
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -192,9 +203,15 @@
 <body>
 
 <header>
-  <div>
+  <div style="display:flex;flex-direction:column;gap:2px;">
     <h1>🎮 Roblox Monitor</h1>
-    <small>Real-time player monitoring dashboard</small>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <small style="color:var(--dim)">Near real-time player monitoring dashboard</small>
+      <span id="liveIndicator" style="display:inline-flex;align-items:center;gap:4px;background:rgba(0,206,201,0.12);border:1px solid rgba(0,206,201,0.3);border-radius:20px;padding:2px 8px;font-size:0.7rem;color:var(--green);font-weight:600;">
+        <span id="liveDot" style="width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 1.5s ease-in-out infinite;"></span>
+        LIVE · refresh in <span id="liveCountdown">15</span>s
+      </span>
+    </div>
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <button onclick="toggleTheme()" id="themeToggleBtn" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;cursor:pointer;font-size:0.82rem">☀️ Light Mode</button>
@@ -378,9 +395,6 @@ async function refreshAll() {
   document.getElementById('stat-gui').textContent = '...';
   document.getElementById('stat-beh').textContent = '...';
   document.getElementById('stat-players').textContent = '...';
-  document.getElementById('guiTableContainer').innerHTML = '<div class="loading">Loading...</div>';
-  document.getElementById('behTableContainer').innerHTML = '<div class="loading">Loading...</div>';
-  document.getElementById('npcTableContainer').innerHTML = '<div class="loading">Loading...</div>';
 
   try {
     const stats = await fetchJSON('/api/get-stats');
@@ -911,8 +925,43 @@ const today = new Date().toLocaleDateString('sv').split(' ')[0]; // sv format is
 document.getElementById('guiDateFilter').value = today;
 document.getElementById('behDateFilter').value = today;
 
+// ==========================================
+// AUTO-REFRESH: Poll DB every 15s (DB updated from Roblox every 15s)
+// ==========================================
+const REFRESH_INTERVAL = 15; // seconds
+let countdown = REFRESH_INTERVAL;
+
+function updateCountdown() {
+  const el = document.getElementById('liveCountdown');
+  const dot = document.getElementById('liveDot');
+  if (el) el.textContent = countdown;
+  // Flash dot green when refreshing
+  if (countdown === REFRESH_INTERVAL) {
+    if (dot) { dot.style.background = 'var(--green)'; }
+  }
+}
+
+function startCountdownTick() {
+  setInterval(() => {
+    countdown--;
+    if (countdown <= 0) {
+      countdown = REFRESH_INTERVAL;
+      // Visual feedback: dot turns accent while loading
+      const dot = document.getElementById('liveDot');
+      if (dot) dot.style.background = 'var(--accent)';
+      refreshAll().then(() => {
+        if (dot) dot.style.background = 'var(--green)';
+      }).catch(() => {
+        if (dot) dot.style.background = 'var(--red)';
+      });
+    }
+    updateCountdown();
+  }, 1000);
+}
+
 refreshAll();
-setInterval(refreshAll, 15000); // Poll every 15 seconds for snappier real-time update
+startCountdownTick();
+updateCountdown();
 </script>
 
 </body>

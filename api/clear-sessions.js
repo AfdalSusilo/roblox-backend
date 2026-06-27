@@ -1,5 +1,5 @@
 // api/clear-sessions.js — POST endpoint to clear all database sessions and logs
-import sql from "../lib/db.js";
+import pool from "../lib/db.js";
 
 export default async function handler(req, res) {
   // CORS preflight
@@ -19,7 +19,7 @@ export default async function handler(req, res) {
 
   try {
     console.log("Clearing all sessions and logs...");
-    await sql`TRUNCATE TABLE gui_logs, behavior_logs RESTART IDENTITY CASCADE;`;
+    await pool.query(`TRUNCATE TABLE gui_logs, behavior_logs RESTART IDENTITY CASCADE;`);
     return res.status(200).json({ success: true, message: "All sessions and logs cleared successfully." });
   } catch (err) {
     console.error("clear-sessions error:", err);

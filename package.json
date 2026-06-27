@@ -1,14 +1,14 @@
 {
   "name": "roblox-backend",
   "version": "1.0.0",
-  "description": "Backend API for Roblox game data collection — Neon PostgreSQL + Vercel Serverless",
+  "description": "Backend API for Roblox game data collection — Supabase PostgreSQL + Vercel Serverless",
   "main": "index.js",
   "scripts": {
     "dev": "vercel dev",
     "deploy": "vercel deploy --prod"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^0.9.0"
+    "pg": "^8.12.0"
   },
   "devDependencies": {
     "vercel": "^34.0.0"

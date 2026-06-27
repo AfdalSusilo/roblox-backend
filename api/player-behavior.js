@@ -1,5 +1,5 @@
-// api/player-behavior.js — POST endpoint: record player behavior data
-import sql from "../lib/db.js";
+// api/player-behavior.js — POST endpoint: record player behavior data (batching on PlayerRemoving)
+import pool from "../lib/db.js";
 
 export default async function handler(req, res) {
   // ----- CORS preflight -----
@@ -34,38 +34,43 @@ export default async function handler(req, res) {
     }
 
     if (id) {
-      // Real-time update of existing session (Delta Append)
-      await sql`
-        UPDATE behavior_logs
-        SET behavior_sequence = COALESCE(behavior_sequence, '[]'::jsonb) || ${JSON.stringify(sequenceArray)}::jsonb,
-            session_time = ${sessionTime ?? 0},
-            mouse_events = COALESCE(mouse_events, '[]'::jsonb) || ${JSON.stringify(mouseEvents ?? [])}::jsonb,
-            position_history = COALESCE(position_history, '[]'::jsonb) || ${JSON.stringify(positionHistory ?? [])}::jsonb,
-            created_at = NOW()
-        WHERE id = ${id}
-      `;
+      // Batched update of existing session (Delta Append — called on PlayerRemoving)
+      await pool.query(
+        `UPDATE behavior_logs
+         SET behavior_sequence = COALESCE(behavior_sequence, '[]'::jsonb) || $1::jsonb,
+             session_time       = $2,
+             mouse_events       = COALESCE(mouse_events, '[]'::jsonb) || $3::jsonb,
+             position_history   = COALESCE(position_history, '[]'::jsonb) || $4::jsonb,
+             created_at         = NOW()
+         WHERE id = $5`,
+        [
+          JSON.stringify(sequenceArray),
+          sessionTime ?? 0,
+          JSON.stringify(mouseEvents ?? []),
+          JSON.stringify(positionHistory ?? []),
+          id,
+        ]
+      );
       return res.status(200).json({ success: true, id });
     } else {
       // Insert new session and return its id
-      const result = await sql`
-        INSERT INTO behavior_logs
-          (player_id, player_name, player_nickname, mouse_events, position_history, behavior_sequence, session_time, created_at)
-        VALUES (
-          ${playerId},
-          ${playerName || null},
-          ${playerNickname || null},
-          ${JSON.stringify(mouseEvents ?? [])},
-          ${JSON.stringify(positionHistory ?? [])},
-          ${JSON.stringify(sequenceArray)},
-          ${sessionTime ?? 0},
-          NOW()
-        )
-        RETURNING id
-      `;
-      return res.status(201).json({ success: true, id: result[0].id });
+      const result = await pool.query(
+        `INSERT INTO behavior_logs
+           (player_id, player_name, player_nickname, mouse_events, position_history, behavior_sequence, session_time, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+         RETURNING id`,
+        [
+          playerId,
+          playerName || null,
+          playerNickname || null,
+          JSON.stringify(mouseEvents ?? []),
+          JSON.stringify(positionHistory ?? []),
+          JSON.stringify(sequenceArray),
+          sessionTime ?? 0,
+        ]
+      );
+      return res.status(201).json({ success: true, id: result.rows[0].id });
     }
-
-    return res.status(201).json({ success: true });
   } catch (err) {
     console.error("player-behavior error:", err);
     return res.status(500).json({ error: "Internal server error" });

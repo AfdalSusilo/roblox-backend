@@ -1,5 +1,5 @@
-// api/gui-input.js — POST endpoint: record player GUI interactions
-import sql from "../lib/db.js";
+// api/gui-input.js — POST endpoint: record player GUI interactions (batching on PlayerRemoving)
+import pool from "../lib/db.js";
 
 export default async function handler(req, res) {
   // ----- CORS preflight -----
@@ -34,10 +34,11 @@ export default async function handler(req, res) {
 
     const ts = timestamp || new Date().toISOString();
 
-    await sql`
-      INSERT INTO gui_logs (player_id, player_name, player_nickname, ui_element, input_data, created_at)
-      VALUES (${playerId}, ${playerName || null}, ${playerNickname || null}, ${uiElement}, ${inputData}, ${ts})
-    `;
+    await pool.query(
+      `INSERT INTO gui_logs (player_id, player_name, player_nickname, ui_element, input_data, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [playerId, playerName || null, playerNickname || null, uiElement, inputData, ts]
+    );
 
     return res.status(201).json({ success: true });
   } catch (err) {

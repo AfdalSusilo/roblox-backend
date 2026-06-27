@@ -1,5 +1,5 @@
 // api/get-gui-logs.js — GET endpoint to retrieve recent GUI logs (for monitoring UI)
-import sql from "../lib/db.js";
+import pool from "../lib/db.js";
 
 export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(204).end();
@@ -13,16 +13,16 @@ export default async function handler(req, res) {
       SELECT player_id, player_name, player_nickname, ui_element, input_data, created_at
       FROM gui_logs
     `;
-    let params = [];
+    const params = [];
     if (playerId) {
       query += ` WHERE player_id = $1`;
       params.push(playerId);
     }
     query += ` ORDER BY created_at DESC LIMIT 100;`;
 
-    const rows = await sql(query, params);
+    const result = await pool.query(query, params);
 
-    return res.status(200).json(rows);
+    return res.status(200).json(result.rows);
   } catch (err) {
     console.error("get-gui-logs error:", err);
     return res.status(500).json({ error: "Internal server error" });
